@@ -1,0 +1,150 @@
+plugins {
+    id 'java-library'
+    id 'jacoco'
+    id 'checkstyle'
+    id 'pmd'
+    id 'info.solidsoft.pitest'
+    id 'com.diffplug.spotless'
+    id 'com.github.spotbugs'
+    id 'maven-publish'
+}
+
+pitest {
+    junit5PluginVersion = '1.2.0'
+    targetClasses = ['com.github.eduardismund.*']
+    targetTests = ['com.github.eduardismund.*']
+    mutationThreshold = 100
+    outputFormats = ['HTML']
+    timestampedReports = false
+    threads = 4
+    historyInputLocation = rootProject.layout.projectDirectory.file(".gradle/pitest-history/${project.name}")
+    historyOutputLocation = rootProject.layout.projectDirectory.file(".gradle/pitest-history/${project.name}")
+}
+
+group = 'com.github.eduardismund'
+version = "$project_version"
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    testImplementation.extendsFrom compileOnly
+    testAnnotationProcessor.extendsFrom annotationProcessor
+}
+
+dependencies {
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    compileOnly "com.github.spotbugs:spotbugs-annotations:${spotbugs.toolVersion.get()}"
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
+
+}
+
+test {
+    useJUnitPlatform()
+    systemProperty 'user.timezone', 'UTC'
+    finalizedBy jacocoTestReport
+}
+
+
+checkstyle {
+    toolVersion = '10.18.2'
+}
+
+Directory buildConfigDir = rootProject.layout.projectDirectory.dir('config')
+
+checkstyleMain {
+    group = 'verification'
+    configFile = buildConfigDir.file('checkstyle/checkstyle-main.xml').asFile
+}
+
+checkstyleTest {
+    group = 'verification'
+    configFile = buildConfigDir.file('checkstyle/checkstyle-test.xml').asFile
+}
+
+pmd {
+    toolVersion = '7.11.0'
+    ignoreFailures = false
+}
+
+pmdMain {
+    group = 'verification'
+    ruleSetFiles = buildConfigDir.files('pmd/pmd-main.xml')
+    ruleSets = []
+}
+
+pmdTest {
+    group = 'verification'
+    ruleSetFiles = buildConfigDir.files('pmd/pmd-test.xml')
+    ruleSets = []
+}
+
+
+spotbugsReportSetup(tasks.spotbugsMain, 'main', project)
+spotbugsReportSetup(tasks.spotbugsTest, 'test', project)
+
+spotless {
+    java {
+        palantirJavaFormat('2.50.0')
+        removeUnusedImports()
+        indentWithSpaces(4)
+    }
+}
+
+
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                minimum = 1.000
+            }
+        }
+    }
+}
+
+check.dependsOn(jacocoTestCoverageVerification)
+
+
+def spotbugsReportSetup(it, qualifier, Project proj) {
+    it.excludeFilter = rootProject.layout.projectDirectory
+            .file("config/spotbugs/spotbugs-exclusions-${qualifier}.xml")
+    it.reports.create('html') {
+        required = true
+        outputLocation = proj.layout.buildDirectory.file(
+                "reports/sportbugs/spotbugs-${qualifier}.html")
+    }
+}
+
+publishing {
+    publications {
+        gpr(MavenPublication) {
+            from components.java
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri("https://maven.pkg.github.com/Eduardismund/application-context")
+            credentials {
+                username = project.findProperty("gpr.user") ?: System.getenv("USERNAME")
+                password = project.findProperty("gpr.key") ?: System.getenv("TOKEN")
+            }
+        }
+    }
+}
